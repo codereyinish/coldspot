@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.coldspot.hotspot</string>
+
+    <!-- the watcher script to run -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/inishbista/wg-hotspot-mac/ios-proxy-test/coldspot-watch.sh</string>
+    </array>
+
+    <!-- TRIGGER: run whenever the network state changes -->
+    <key>WatchPaths</key>
+    <array>
+        <string>/Library/Preferences/SystemConfiguration</string>
+    </array>
+
+    <!-- also run once at boot / when the daemon is loaded -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- RECONCILE every 30s: self-heals — brings the utun up once the iPhone
+         connects its slots (which happens a few seconds after the proxy starts),
+         and tears down stale routes if the hotspot vanished. Idempotent + lock. -->
+    <key>StartInterval</key>
+    <integer>30</integer>
+
+    <!-- KEY: don't kill proxy.py when the watcher script exits -->
+    <key>AbandonProcessGroup</key>
+    <true/>
+
+    <!-- logs so we can see what it did -->
+    <key>StandardOutPath</key>
+    <string>/tmp/coldspot.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/coldspot.err</string>
+</dict>
+</plist>

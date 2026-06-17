@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+
+# Xcode
+xcuserdata/
+*.xcuserstate
+DerivedData/
+build/
+
+# editor / backups
+*.bak
+*.swp
+
+# runtime logs
+*.log
