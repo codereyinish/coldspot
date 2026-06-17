@@ -5,11 +5,14 @@
     <key>Label</key>
     <string>com.coldspot.hotspot</string>
 
-    <!-- the watcher script to run -->
+    <!-- the watcher script to run.
+         __COLDSPOT_WATCH__ is a placeholder — install-autostart.sh substitutes
+         the real absolute path to mac/coldspot-watch.sh at install time, so this
+         repo works wherever it's cloned. -->
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
-        <string>/Users/inishbista/wg-hotspot-mac/ios-proxy-test/coldspot-watch.sh</string>
+        <string>__COLDSPOT_WATCH__</string>
     </array>
 
     <!-- TRIGGER: run whenever the network state changes -->

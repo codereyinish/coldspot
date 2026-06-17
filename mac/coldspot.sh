@@ -7,7 +7,7 @@
 #
 # Needs root (tcpdump for the leak finder lives inside proxy.py now).
 #
-# Usage:  sudo bash ~/wg-hotspot-mac/ios-proxy-test/coldspot.sh
+# Usage:  sudo bash mac/coldspot.sh
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
-exec python3 "$DIR/proxy.py"
+exec python3 "$DIR/../server/proxy.py"

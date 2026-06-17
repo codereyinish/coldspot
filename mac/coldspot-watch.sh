@@ -15,7 +15,7 @@ touch "$LOCKFILE"
 trap "rm -f $LOCKFILE" EXIT
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
-PROXY="$DIR/proxy.py"
+PROXY="$DIR/../server/proxy.py"
 TUNCTL="$DIR/coldspot-tun-ctl.sh"
 LOG="/tmp/coldspot-proxy.log"
 IPHONE_GATEWAY="172.20.10.1"

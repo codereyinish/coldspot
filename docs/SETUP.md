@@ -9,7 +9,7 @@
    - Bundle Identifier: com.yourname.proxytest
    - Interface: SwiftUI
    - Language: Swift
-5. Save location: wg-hotspot-mac/ios-proxy-test/ProxyTest/
+5. Save location: coldspot/ios/ProxyTest/
 
 ## Step 2 — Replace Generated Files
 Xcode creates default files. Replace them with ours:
