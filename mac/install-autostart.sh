@@ -11,11 +11,23 @@ WATCH="$DIR/coldspot-watch.sh"                 # absolute path to the watcher
 TEMPLATE="$DIR/com.coldspot.hotspot.plist"
 DST="/Library/LaunchDaemons/com.coldspot.hotspot.plist"
 
+# the real (non-root) user, even when this runs under sudo, plus their home.
+REAL_USER="${SUDO_USER:-$USER}"
+USER_HOME="$(eval echo "~${REAL_USER}")"
+FLAGDIR="$USER_HOME/.coldspot"                  # holds the menu-bar on/off flag
+
 [ -f "$WATCH" ] || { echo "[install] ERROR: $WATCH not found"; exit 1; }
 
+# create the flag folder owned by the user so the menu-bar app can write it, and
+# so launchd's WatchPaths has a path to watch from the very first toggle.
+echo "[install] flag folder → $FLAGDIR (owner: $REAL_USER)"
+mkdir -p "$FLAGDIR"
+chown "$REAL_USER" "$FLAGDIR"
+
 echo "[install] writing plist → $DST  (watcher: $WATCH)"
-# substitute the placeholder with the real absolute watcher path
-sed "s|__COLDSPOT_WATCH__|$WATCH|" "$TEMPLATE" > "$DST"
+# substitute both placeholders: the watcher path and the flag folder to watch
+sed -e "s|__COLDSPOT_WATCH__|$WATCH|" \
+    -e "s|__COLDSPOT_FLAGDIR__|$FLAGDIR|" "$TEMPLATE" > "$DST"
 chown root:wheel "$DST"     # LaunchDaemons must be owned by root
 chmod 644 "$DST"
 

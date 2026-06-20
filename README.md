@@ -45,7 +45,10 @@ coldspot/
 │
 ├── mac/           host-side networking & orchestration (runs on the Mac)
 │   ├── coldspot.sh             one-command launcher (sudo → runs server/proxy.py)
-│   ├── coldspot-watch.sh       launchd watcher: hotspot → start, off-hotspot → tear down
+│   ├── coldspot-watch.sh       launchd watcher: toggle ON + hotspot → start, else tear down
+│   ├── coldspot-toggle.sh      flip the menu-bar ON/OFF flag (~/.coldspot/enabled)
+│   ├── swiftbar/coldspot.5s.sh SwiftBar menu-bar plugin (status + ON/OFF button)
+│   ├── install-swiftbar.sh     symlink the plugin into SwiftBar's plugin folder
 │   ├── coldspot-tun-ctl.sh     utun123 up/down/status engine (idempotent, safety-gated)
 │   ├── coldspot-tun-up.sh      thin manual wrapper → tun-ctl up
 │   ├── coldspot-tun-down.sh    thin manual wrapper → tun-ctl down
@@ -72,6 +75,26 @@ sudo bash mac/coldspot-tun-up.sh    # bring up the utun safety-net
 
 #    …or install the auto-start daemon (starts/stops itself on the hotspot):
 sudo bash mac/install-autostart.sh
+```
+
+## Menu-bar toggle (SwiftBar)
+A ❄️ menu-bar switch turns ColdSpot on/off. The button never does privileged work
+— it just creates/deletes a flag file (`~/.coldspot/enabled`) = your saved intent.
+The root daemon watches that file and reconciles. The rule:
+
+| Toggle | On hotspot? | Result |
+|--------|-------------|--------|
+| OFF    | anything    | everything torn down |
+| ON     | yes         | ColdSpot runs |
+| ON     | no          | stays down, waits for the hotspot |
+
+So it only runs on the hotspot, re-runs on any network change, and on reboot it
+checks the toggle first (RunAtLoad): booted OFF → does nothing.
+
+```bash
+brew install --cask swiftbar     # once; open it and pick a plugin folder
+sudo bash mac/install-autostart.sh   # the daemon (does the real work)
+bash mac/install-swiftbar.sh         # link the ❄️ plugin into SwiftBar
 ```
 
 ## Concepts it demonstrates

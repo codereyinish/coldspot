@@ -15,10 +15,13 @@
         <string>__COLDSPOT_WATCH__</string>
     </array>
 
-    <!-- TRIGGER: run whenever the network state changes -->
+    <!-- TRIGGERS: run whenever the network state changes, OR when the menu-bar
+         toggle creates/deletes its flag file inside this folder (instant on/off).
+         __COLDSPOT_FLAGDIR__ is substituted with the user's ~/.coldspot at install. -->
     <key>WatchPaths</key>
     <array>
         <string>/Library/Preferences/SystemConfiguration</string>
+        <string>__COLDSPOT_FLAGDIR__</string>
     </array>
 
     <!-- also run once at boot / when the daemon is loaded -->

@@ -21,11 +21,43 @@ LOG="/tmp/coldspot-proxy.log"
 IPHONE_GATEWAY="172.20.10.1"
 WIFI="Wi-Fi"
 
+# MASTER SWITCH (the menu-bar toggle). The flag file is the user's saved intent:
+#   present = ColdSpot ON,  absent = OFF.  It lives in the logged-in user's home
+# (this script runs as root under launchd, so resolve the console user's home).
+# The menu-bar app only ever creates/deletes this file — the daemon does the work.
+CONSOLE_USER="$(stat -f%Su /dev/console 2>/dev/null)"
+USER_HOME="$(eval echo "~${CONSOLE_USER}" 2>/dev/null)"
+FLAG="$USER_HOME/.coldspot/enabled"
+
 # is the SOCKS5 system proxy currently ON?  (used to avoid needless networksetup
 # calls — networksetup writes SystemConfiguration, which would re-trigger us)
 socks_is_on() {
     networksetup -getsocksfirewallproxy "$WIFI" 2>/dev/null | grep -q "Enabled: Yes"
 }
+
+# bring EVERYTHING down — utun first (restores other networks instantly), then
+# proxy + leak monitor, then SOCKS5. Reused by the toggle-OFF and off-hotspot paths.
+tear_down() {
+    bash "$TUNCTL" down
+    if pgrep -f "proxy.py" >/dev/null; then
+        echo "  stopping proxy.py + leak monitor"
+        pkill -f "proxy.py"
+        pkill -f "tcpdump -i en0"
+    fi
+    if socks_is_on; then
+        echo "  disabling SOCKS5"
+        networksetup -setsocksfirewallproxystate "$WIFI" off 2>/dev/null
+    fi
+}
+
+# toggle OFF? then nothing else matters — ensure all is down and stop here.
+# (on reboot RunAtLoad fires this too, so a Mac that booted with the toggle OFF
+#  simply does nothing; with it ON it proceeds to the hotspot check below.)
+if [ ! -f "$FLAG" ]; then
+    echo "$(date '+%F %T') → toggle OFF (no $FLAG) — ensuring everything down"
+    tear_down
+    exit 0
+fi
 
 current_gateway=$(netstat -rn | awk '/default/{print $2}' | head -1)
 echo "$(date '+%F %T') gateway=$current_gateway"
@@ -53,17 +85,7 @@ if [ "$current_gateway" = "$IPHONE_GATEWAY" ]; then
     echo "  reconciling utun safety-net"
     bash "$TUNCTL" up
 else
-    echo "→ off hotspot"
-    # tear the utun DOWN FIRST — removes the 0/1 default override so other
-    # networks (home Wi-Fi, etc.) work the moment the hotspot is gone.
-    bash "$TUNCTL" down
-    if pgrep -f "proxy.py" >/dev/null; then
-        echo "  stopping proxy.py + leak monitor"
-        pkill -f "proxy.py"
-        pkill -f "tcpdump -i en0"
-    fi
-    if socks_is_on; then
-        echo "  disabling SOCKS5"
-        networksetup -setsocksfirewallproxystate "$WIFI" off 2>/dev/null
-    fi
+    # toggle is ON but we're not on the hotspot — stay down and wait for it.
+    echo "→ toggle ON but off hotspot — ensuring everything down"
+    tear_down
 fi
