@@ -1,14 +1,17 @@
 # ColdSpot — Architecture
 
-A **system-wide transparent proxy** that routes a Mac's traffic out through an
-iPhone's cellular connection — including apps that have no proxy support — by
-capturing traffic at the **IP layer (Layer 3)** and tunnelling it through a
-**reverse connection** the iPhone holds open.
+A **system-wide transparent proxy** that routes a Mac's traffic — including apps
+that have no proxy support — through a paired iPhone (acting as a relay over its
+own mobile uplink) out to an **exit server you own**, by capturing traffic at the
+**IP layer (Layer 3)** and tunnelling it through a **reverse connection** the
+iPhone holds open.
 
 > **15-second pitch:** A virtual network interface captures *all* of a Mac's
-> traffic at Layer 3; `tun2socks` converts those packets into a SOCKS stream;
-> a reverse tunnel to an iPhone re-originates each connection over cellular.
-> Capturing at Layer 3 means even apps that ignore proxy settings get caught.
+> traffic at Layer 3; `tun2socks` converts those packets into a SOCKS stream; a
+> reverse tunnel to an iPhone carries each connection onward to a self-hosted
+> exit server (authenticated SOCKS5 over TLS) that re-originates it to the
+> internet. Capturing at Layer 3 means even apps that ignore proxy settings get
+> caught; the iPhone is a dumb relay, so the Mac↔exit conversation is end-to-end.
 
 ---
 
@@ -42,7 +45,10 @@ flowchart LR
         proxy["proxy.py - SOCKS5 1080 + slot pool 9999"]
     end
     subgraph PHONE["iPhone"]
-        app["iPhone app - 20 reverse slots"]
+        app["iPhone app - 30 reverse slots (relay)"]
+    end
+    subgraph EXIT["exit server (yours)"]
+        ex["exit.py - SOCKS5 over TLS"]
     end
     NET["news.com / github.com"]
 
@@ -50,9 +56,12 @@ flowchart LR
     CLI -->|raw IP packets| utun
     utun --> t2s
     t2s -->|SOCKS5| proxy
-    proxy -->|CONNECT host port via a slot| app
-    app -->|re-originate over cellular| NET
-    NET -->|response| app
+    proxy -->|CONNECT exit:port via a slot| app
+    app -->|relay over mobile uplink| ex
+    proxy -. TLS + SOCKS5 auth, end-to-end through the relay .-> ex
+    ex -->|re-originate| NET
+    NET -->|response| ex
+    ex --> app
     app -->|bytes back via same slot| proxy
     proxy -->|direct| Safari
     proxy -->|re-packetize| t2s
@@ -63,14 +72,18 @@ flowchart LR
 ASCII version (for terminals / slides):
 
 ```
-        ┌─────────── FORWARD (app → internet) ───────────┐
+        ┌─────────────────── FORWARD (app → internet) ───────────────────┐
 Safari ─SOCKS(loopback)─┐
-                        ├─► proxy.py ─► slot ─► en0 ─► iPhone ─cellular─► news.com / github
-git ─utun─► tun2socks ──┘     :1080      (pool)
-        └─────────── RETURN (internet → app) ────────────┐
-news.com/github ─cellular─► iPhone ─► slot ─► en0 ─► proxy.py ─┬─► Safari (direct)
-                                                              └─► tun2socks ─► utun ─► git
+                        ├─► proxy.py ─► slot ─► en0 ─► iPhone ─uplink─► exit ─► news.com / github
+git ─utun─► tun2socks ──┘     :1080      (pool)         (relay)    (TLS+SOCKS, end-to-end)
+        └─────────────────── RETURN (internet → app) ───────────────────┐
+news.com/github ─► exit ─► iPhone ─► slot ─► en0 ─► proxy.py ─┬─► Safari (direct)
+                                                             └─► tun2socks ─► utun ─► git
 ```
+
+The Mac tells the iPhone only to dial `exit:port`; it then runs TLS + authenticated
+SOCKS5 to the exit **through** that slot, so the real destination is negotiated
+end-to-end (Mac ↔ exit) and the iPhone never parses it.
 
 ---
 
@@ -78,8 +91,9 @@ news.com/github ─cellular─► iPhone ─► slot ─► en0 ─► proxy.py 
 
 | Component | Runs on | Role | Layer |
 |---|---|---|---|
-| **iPhone app** | iPhone | holds ~20 "slots" open to the Mac; dials real destinations over cellular | — |
-| **proxy.py** | Mac | SOCKS5 server (:1080) + slot pool (:9999) + byte/leak dashboard | L5 |
+| **exit.py** | exit server (yours) | authenticated SOCKS5-over-TLS exit; re-originates connections to the internet | L5 |
+| **iPhone app** | iPhone | holds 30 "slots" open to the Mac; relays each onward to the exit over its mobile uplink (a dumb pipe) | — |
+| **proxy.py** | Mac | SOCKS5 server (:1080) + slot pool (:9999) + byte/leak dashboard; speaks TLS+SOCKS to the exit through each slot | L5 |
 | **tun2socks** | Mac | translates raw IP packets ⇄ SOCKS connections (two-way) | L3⇄L5 |
 | **utun123** | Mac | virtual interface that captures all traffic | L3 |
 | **routing table** | Mac | decides what enters utun vs stays on en0 | L3 |
@@ -131,20 +145,27 @@ Both converge at `proxy.py:1080` speaking SOCKS5.
 ### Step 2 — proxy.py assigns each a slot
 
 ```
-Safari → grab_slot() → slot #7   (pool: 19 left)
-git    → grab_slot() → slot #8   (pool: 18 left)
-proxy.py → slot#7: "CONNECT news.com:443"
-proxy.py → slot#8: "CONNECT github.com:443"
+Safari → grab_slot() → slot #7   (pool: 29 left)
+git    → grab_slot() → slot #8   (pool: 28 left)
+proxy.py → slot#7: "CONNECT <exit-ip>:443"      ← always the exit, never the real dest
+proxy.py → slot#8: "CONNECT <exit-ip>:443"
 ```
 
 Slots are TCP connections the iPhone opened earlier, so writing to them sends
-bytes **out en0 → 172.20.10.1 (the iPhone)** over the hotspot WiFi.
+bytes **out en0 → 172.20.10.1 (the iPhone)** over the hotspot WiFi. Note the Mac
+sends the *exit's* address to the iPhone for **every** connection — the real
+destination is kept for the next step.
 
-### Step 3 — the iPhone re-originates over cellular
+### Step 3 — the iPhone relays to the exit; the Mac negotiates the real dest end-to-end
 
 ```
-iPhone (slot#7): reads CONNECT → opens NWConnection to news.com:443 over CELLULAR → "CONNECTED"
-iPhone (slot#8): reads CONNECT → opens NWConnection to github.com:443 over CELLULAR → "CONNECTED"
+iPhone (slot#7): reads CONNECT → opens a pipe to <exit-ip>:443 over its uplink → "CONNECTED"
+iPhone (slot#8): reads CONNECT → opens a pipe to <exit-ip>:443 over its uplink → "CONNECTED"
+
+proxy.py now talks straight THROUGH each pipe to the exit (the iPhone just shovels bytes):
+   slot#7:  TLS handshake (pinned cert) → SOCKS5 user/pass auth → "CONNECT news.com:443"
+   slot#8:  TLS handshake (pinned cert) → SOCKS5 user/pass auth → "CONNECT github.com:443"
+exit.py dials the real destination and returns success.
 ```
 
 ### Step 4 — FORWARD bytes (app → internet)
@@ -152,8 +173,8 @@ iPhone (slot#8): reads CONNECT → opens NWConnection to github.com:443 over CEL
 `proxy.py`'s `pipe()` runs two threads per connection (one per direction):
 
 ```
-Safari request → proxy.py → slot#7 → iPhone → news.com
-git request    → utun → tun2socks → proxy.py → slot#8 → iPhone → github
+Safari request → proxy.py → (TLS) slot#7 → iPhone → exit → news.com
+git request    → utun → tun2socks → proxy.py → (TLS) slot#8 → iPhone → exit → github
 ```
 
 ### Step 5 — RETURN bytes (internet → app)
@@ -163,10 +184,10 @@ differently:
 
 ```
 SAFARI (entered via SOCKS directly):
-   news.com → iPhone → slot#7 → proxy.py → writes straight back to Safari's socket ✅
+   news.com → exit → iPhone → slot#7 → proxy.py → writes straight back to Safari's socket ✅
 
 GIT (entered via capture):
-   github → iPhone → slot#8 → proxy.py → tun2socks RE-PACKETIZES the bytes into IP
+   github → exit → iPhone → slot#8 → proxy.py → tun2socks RE-PACKETIZES the bytes into IP
           → injects them into utun123 → OS delivers them to git as if from github ✅
 ```
 

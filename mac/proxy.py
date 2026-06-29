@@ -4,6 +4,7 @@ import struct
 import time
 import os
 import sys
+import ssl
 import subprocess
 import ipaddress
 
@@ -11,7 +12,62 @@ TUNNEL_PORT = 9999   # iPhone connects here
 SOCKS_PORT  = 1080   # SOCKS5 (for GUI apps via system proxy setting)
 
 IFACE  = "en0"             # hotspot interface
-IPHONE = "172.20.10.1"     # iPhone (tunnel = phone APN)
+IPHONE = "172.20.10.1"     # iPhone (relay over its mobile uplink)
+
+# ── Exit server config ────────────────────────────────────────────────────────
+# Written by mac/install.sh into ~/.coldspot/exit.conf. The iPhone is a dumb
+# relay: for EVERY connection we tell it to dial the EXIT server, then we speak
+# authenticated SOCKS5-over-TLS to the exit THROUGH that relay (the real
+# destination is negotiated end-to-end Mac↔exit; the iPhone never sees it). So:
+#
+#   proxy.py  ──CONNECT exit:port──▶  iPhone  ──TCP──▶  exit server
+#   proxy.py  ════ TLS + SOCKS5(auth) over that pipe ════▶  exit  ──▶  internet
+
+def _find_conf():
+    """Locate exit.conf. The auto-start daemon runs us as root, so a bare
+    ~ would be /var/root — resolve the invoking/console user's home instead."""
+    p = os.environ.get("COLDSPOT_CONF")
+    if p:
+        return p
+    user = os.environ.get("SUDO_USER")
+    home = os.path.expanduser(f"~{user}") if user else os.path.expanduser("~")
+    return os.path.join(home, ".coldspot", "exit.conf")
+
+def _load_exit_conf():
+    """Parse KEY=VALUE lines from exit.conf. Returns {} if it's missing."""
+    path = _find_conf()
+    conf = {}
+    try:
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                conf[k.strip()] = v.strip()
+    except OSError:
+        return {}
+    return conf
+
+EXIT = _load_exit_conf()
+EXIT_IP   = EXIT.get("EXIT_IP", "")
+EXIT_PORT = int(EXIT.get("EXIT_PORT", "443"))
+EXIT_USER = EXIT.get("EXIT_USER", "")
+EXIT_PASS = EXIT.get("EXIT_PASS", "")
+EXIT_CERT = EXIT.get("EXIT_CERT", "")
+
+# Pinned-cert TLS context: we trust ONLY our exit's self-signed cert. The cert's
+# CN isn't a hostname (we connect by IP through the relay), so hostname checking
+# is off — the cert pin is what authenticates the server.
+_tls_ctx = None
+if EXIT_CERT and os.path.exists(EXIT_CERT):
+    _tls_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    _tls_ctx.check_hostname = False
+    _tls_ctx.verify_mode = ssl.CERT_REQUIRED
+    try:
+        _tls_ctx.load_verify_locations(EXIT_CERT)
+    except ssl.SSLError:
+        _tls_ctx = None
 
 # ── Slot priority: keep foreground/user traffic from being starved by chatty
 # background services (iCloud sync, cert checks, push). Low-priority connections
@@ -275,20 +331,81 @@ def grab_slot():
                 return available_slots.pop(0)
         time.sleep(0.05)
 
-def send_connect(host, port):
-    """Grab a live slot and send CONNECT command. Returns the slot."""
-    while True:
-        slot = grab_slot()
+def _recv_exact(sock, n):
+    """Read exactly n bytes from sock or raise (used for SOCKS5 replies)."""
+    buf = b""
+    while len(buf) < n:
+        chunk = sock.recv(n - len(buf))
+        if not chunk:
+            raise ConnectionError("exit closed mid-handshake")
+        buf += chunk
+    return buf
+
+def _socks5_client(sock, host, port):
+    """Speak SOCKS5 (username/password auth) to the exit over `sock`, asking it
+    to CONNECT to the real destination. Returns True on success."""
+    # greeting — offer ONLY username/password (0x02)
+    sock.sendall(b"\x05\x01\x02")
+    resp = _recv_exact(sock, 2)
+    if resp[0] != 0x05 or resp[1] != 0x02:
+        return False
+    # auth (RFC 1929): VER=1, ULEN, UNAME, PLEN, PASSWD
+    u = EXIT_USER.encode(); p = EXIT_PASS.encode()
+    sock.sendall(b"\x01" + bytes([len(u)]) + u + bytes([len(p)]) + p)
+    resp = _recv_exact(sock, 2)
+    if resp[0] != 0x01 or resp[1] != 0x00:
+        return False
+    # CONNECT — always as a domain name (atype 3); the exit resolves/dials it.
+    h = host.encode()
+    sock.sendall(b"\x05\x01\x00\x03" + bytes([len(h)]) + h + struct.pack("!H", port))
+    rep = _recv_exact(sock, 4)
+    if rep[0] != 0x05 or rep[1] != 0x00:
+        return False
+    # consume BND.ADDR + BND.PORT so the stream is positioned at the payload
+    atyp = rep[3]
+    if   atyp == 0x01: _recv_exact(sock, 4)
+    elif atyp == 0x03: _recv_exact(sock, _recv_exact(sock, 1)[0])
+    elif atyp == 0x04: _recv_exact(sock, 16)
+    _recv_exact(sock, 2)
+    return True
+
+def open_exit(host, port):
+    """Open a TLS + authenticated-SOCKS5 channel to the exit server, tunnelled
+    THROUGH an iPhone slot. We tell the iPhone to dial the exit (it relays raw
+    bytes), then run TLS + SOCKS5 end-to-end to the exit for the REAL dest.
+    Returns the ready-to-pipe TLS stream, or None on failure."""
+    # Grab a slot and have the iPhone dial the exit. Retry across dead slots
+    # (same resilience the old send_connect had), but only for the send step.
+    slot = None
+    for _ in range(POOL_SIZE + 1):
+        cand = grab_slot()
         try:
-            slot.sendall(f"CONNECT {host}:{port}\n".encode())
-            return slot
+            cand.sendall(f"CONNECT {EXIT_IP}:{EXIT_PORT}\n".encode())
+            slot = cand
+            break
         except OSError:
-            # Just THIS slot is dead — drop only it and grab the next one.
-            # (Previously we cleared the WHOLE pool here, which made the iPhone
-            #  flood-reconnect all 20 slots → socket churn → FD leak →
-            #  "Too many open files" wedged accept(). Drop one, keep the other 19.)
-            try: slot.close()
+            try: cand.close()
             except: pass
+    if slot is None:
+        return None
+    if not wait_connected(slot):
+        try: slot.close()
+        except: pass
+        return None
+    # The slot is now a raw pipe to the exit. Wrap it in TLS (pinned cert) and
+    # authenticate, asking the exit to connect onward to the real destination.
+    try:
+        tls = _tls_ctx.wrap_socket(slot)
+        if not _socks5_client(tls, host, port):
+            try: tls.close()
+            except: pass
+            return None
+        return tls
+    except (ssl.SSLError, OSError, ConnectionError) as e:
+        log(f"exit handshake failed for {host}:{port}: {e}")
+        try: slot.close()
+        except: pass
+        return None
 
 def wait_connected(slot):
     """Wait for CONNECTED or FAILED from iPhone. Returns True if connected."""
@@ -349,9 +466,17 @@ def handle_socks(client):
 
         port = struct.unpack("!H", client.recv(2))[0]
 
+        # No exit configured? Refuse clearly instead of hanging — install.sh
+        # writes ~/.coldspot/exit.conf + pins the cert.
+        if not EXIT_IP or _tls_ctx is None:
+            log("[SOCKS5] no exit server configured — run mac/install.sh first")
+            client.send(b"\x05\x05\x00\x01\x00\x00\x00\x00\x00\x00")
+            client.close()
+            return
+
         # Private/local IPs (192.168.x, 10.x, 172.20.10.1, link-local...) can't be
-        # reached over cellular — tunneling them just hangs at 0 bytes and clogs a
-        # slot. Refuse fast, no slot used. (This lives in proxy.py, so it ONLY
+        # reached through the exit — tunneling them just hangs at 0 bytes and clogs
+        # a slot. Refuse fast, no slot used. (This lives in proxy.py, so it ONLY
         # applies while the proxy runs — off the hotspot your LAN works normally.)
         if is_private(host):
             log(f"[SOCKS5] reject LOCAL {host}:{port} (private, not tunneled)")
@@ -370,18 +495,16 @@ def handle_socks(client):
         if low:
             low_prio_sem.acquire()
         try:
-            slot = send_connect(host, port)
-
-            if not wait_connected(slot):
-                log(f"iPhone failed to connect to {host}:{port}")
+            stream = open_exit(host, port)
+            if stream is None:
+                log(f"exit failed to connect to {host}:{port}")
                 client.send(b"\x05\x05\x00\x01\x00\x00\x00\x00\x00\x00")
                 client.close()
-                slot.close()
                 return
 
-            log(f"[SOCKS5] Piping {host}:{port} via phone APN [{tag}]")
+            log(f"[SOCKS5] Piping {host}:{port} via exit [{tag}]")
             client.send(b"\x05\x00\x00\x01\x00\x00\x00\x00\x00\x00")
-            pipe(client, slot)
+            pipe(client, stream)
         finally:
             if low:
                 low_prio_sem.release()

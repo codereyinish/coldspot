@@ -1,0 +1,12 @@
+# Optional overrides. You normally DON'T need this file at all — provision.sh
+# supplies compartment_ocid + ssh_public_key automatically via TF_VAR_* env vars
+# (read from ~/.oci/config and ~/.ssh). Copy to terraform.tfvars only if you want
+# to change a default below. Nothing secret should be committed.
+
+# A bigger Ampere ARM box (often "Out of host capacity" on Always-Free):
+# instance_shape     = "VM.Standard.A1.Flex"
+# instance_ocpus     = 2
+# instance_memory_gb = 12
+
+# Different exit port (must match what install.sh / the Security List use):
+# exit_port = 443

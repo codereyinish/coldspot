@@ -10,4 +10,6 @@
 # Usage:  sudo bash mac/coldspot.sh
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
-exec python3 "$DIR/../server/proxy.py"
+# proxy.py reads the exit config from ~/.coldspot/exit.conf. Under sudo it
+# resolves SUDO_USER's home automatically, so nothing to pass here.
+exec python3 "$DIR/proxy.py"

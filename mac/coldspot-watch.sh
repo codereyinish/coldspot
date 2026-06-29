@@ -15,7 +15,7 @@ touch "$LOCKFILE"
 trap "rm -f $LOCKFILE" EXIT
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
-PROXY="$DIR/../server/proxy.py"
+PROXY="$DIR/proxy.py"
 TUNCTL="$DIR/coldspot-tun-ctl.sh"
 LOG="/tmp/coldspot-proxy.log"
 IPHONE_GATEWAY="172.20.10.1"
@@ -68,7 +68,9 @@ if [ "$current_gateway" = "$IPHONE_GATEWAY" ]; then
         echo "  starting proxy.py"
         # NO nohup (fails under launchd: no console). AbandonProcessGroup=true in
         # the plist keeps this alive after the watcher exits.
-        python3 "$PROXY" >"$LOG" 2>&1 &
+        # We run as root here, so tell proxy.py where the user's exit config is
+        # (a bare ~ would resolve to /var/root). $USER_HOME = the console user.
+        COLDSPOT_CONF="$USER_HOME/.coldspot/exit.conf" python3 "$PROXY" >"$LOG" 2>&1 &
     else
         echo "  proxy.py already running — skip"
     fi

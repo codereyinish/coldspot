@@ -1,4 +1,33 @@
-# ProxyTest — Xcode Setup Guide
+# ColdSpot — Setup Guide
+
+Three pieces: the **iPhone app** (Part 1), and the **exit server + Mac** (Part 2).
+Do Part 1 once in Xcode; Part 2 is a single command.
+
+---
+
+## Part 2 at a glance — exit server + Mac (one command)
+
+```bash
+# builds a free Oracle Always-Free VM, installs the exit over SSH, then runs
+# mac/install.sh to fetch its cert + credentials and wire up the menu-bar toggle
+cd server/provision && ./provision.sh
+```
+
+- The only manual prerequisite is a free Oracle Cloud account
+  (<https://signup.cloud.oracle.com> — card + SMS, required by Oracle). See
+  [server/provision/README.md](../server/provision/README.md) for details.
+- **Already have an Ubuntu server?** Skip provisioning and just run
+  `bash mac/install.sh`, giving it the server's IP. It SSHes in, installs the
+  exit if needed, and saves the config to `~/.coldspot/`.
+- Re-runs are safe: the exit's TLS cert + credentials are generated once and
+  reused, so they never go stale on an already-configured Mac.
+
+After Part 2: connect the Mac to the iPhone's Personal Hotspot and flip the ❄️
+menu-bar toggle **ON**.
+
+---
+
+## Part 1 — the iPhone app (Xcode, one-time)
 
 ## Step 1 — Create Xcode Project
 1. Open Xcode

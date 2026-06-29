@@ -1,0 +1,9 @@
+# Terraform working files & state — never commit (state can contain resource
+# details; tfvars can contain overrides).
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.backup
+terraform.tfvars
+crash.log
+provision.log
