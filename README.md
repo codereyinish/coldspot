@@ -1,22 +1,25 @@
 # ColdSpot — Transparent System-Wide Proxy (a hands-on networking project)
 
-Capture **all** of a Mac's network traffic at the IP layer and route it through a
-reverse tunnel — automatically, for every app, including ones that ignore proxy
-settings — out to an **exit server you own**. It's a from-scratch tour of how a
-VPN-like data path is actually built: Layer-3 capture, a userspace TCP/IP stack,
-a reverse-connection tunnel, SOCKS5, and a self-hosted cloud exit.
+Route **all** of a Mac's traffic — every app, even ones that ignore proxy
+settings — through a paired iPhone and out to a small **exit server you own**.
+A from-scratch look at how a VPN-like data path is actually built.
 
-## What it is (plain version)
-Most proxies are *opt-in*: an app has to choose to use them. Browsers cooperate;
-command-line tools and system daemons don't, so they "leak" around the proxy.
-ColdSpot captures traffic **below** the app — at the network (IP) layer — using a
-virtual interface, so nothing can opt out. It rebuilds those packets into
-connections, hands each to a paired iPhone over a pool of reverse-tunnel slots,
-and the iPhone relays them onward — over its own mobile uplink — to a small
-**exit server** that re-originates them to the internet from an address you own.
+## What it is
+Normal proxies are **opt-in**: each app chooses to use them, so command-line
+tools and system daemons just ignore them and leak around. ColdSpot instead
+captures traffic **at the IP layer**, below the app — so nothing can opt out —
+and carries it over a **reverse tunnel** the iPhone holds open to the Mac. The
+iPhone relays it onward to your **exit server**, which sends it to the internet
+from an address you control.
 
-It's built as **developer/educational material**: a working system you can stand
-up end-to-end to learn each layer, not a product.
+Built as **developer/educational material** — a working system to stand up and
+learn from, end to end, not a product. The four ideas it ties together:
+
+- **Layer-3 capture** — a virtual interface grabs every packet, so no app escapes.
+- **Userspace TCP/IP** (`tun2socks`) — turns those raw packets back into connections.
+- **Reverse tunnel** — the iPhone dials *out* to the Mac and holds slots open
+  (so a phone behind carrier NAT can still be reached).
+- **Self-hosted exit** — your own cloud server is the final hop to the internet.
 
 ## How it works
 ```
