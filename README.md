@@ -1,8 +1,12 @@
-# ColdSpot — Transparent System-Wide Proxy (a hands-on networking project)
+# ColdSpot — make your Mac disappear 🫥
+
+*Your Mac goes quiet. The network just sees a server somewhere else doing the
+talking.*
 
 Route **all** of a Mac's traffic — every app, even ones that ignore proxy
-settings — through a paired iPhone and out to a small **exit server you own**.
-A from-scratch look at how a VPN-like data path is actually built.
+settings — through a paired iPhone and out to a small **exit server you own**, so
+the outside world meets your server's address instead of your Mac's. A
+from-scratch look at how a VPN-like data path is actually built.
 
 ## What it is
 Normal proxies are **opt-in**: each app chooses to use them, so command-line
