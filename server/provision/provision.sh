@@ -60,6 +60,35 @@ OCI_CONFIG="$HOME/.oci/config"
 
 export COLUMNS="$(tput cols 2>/dev/null || echo 80)"
 
+# --- Checkpoint 1: Oracle account --------------------------------------------
+# The one thing we can't automate: you need a free Oracle Cloud account. If
+# ~/.oci/config already has this profile, you've logged in before, so you
+# obviously have an account — skip the question and go straight to login.
+if [ -f "$OCI_CONFIG" ] && grep -q "^\[$PROFILE\]" "$OCI_CONFIG"; then
+    :   # already configured — handled in step 3
+else
+    header "Checkpoint 1 — Oracle Cloud account"
+    echo "  ColdSpot's exit server runs on Oracle's free 'Always-Free' tier, so the"
+    echo "  one manual step is a (free) Oracle Cloud account."
+    echo ""
+    printf "  ${BLD}Do you already have an Oracle Cloud account? [y/N]${RST} "
+    read -r HAVE_ACCT
+    case "$HAVE_ACCT" in
+        [yY]*) ok "great — we'll log you in during step 3" ;;
+        *)
+            echo ""
+            echo "  Create one here (needs a card for ID + an SMS code — Always-Free"
+            echo "  doesn't charge you), and pick a ${BLD}Home Region${RST} near you:"
+            echo ""
+            echo "    ${BLU}https://signup.cloud.oracle.com${RST}"
+            echo ""
+            echo "  ${DIM}Remember the Home Region — you'll re-pick it during login.${RST}"
+            echo ""
+            read -rp "  Press Enter once your account is created and the console has loaded... "
+            ;;
+    esac
+fi
+
 # --- 1. OCI CLI ---------------------------------------------------------------
 header "OCI CLI"
 if command -v oci >/dev/null 2>&1; then
@@ -94,7 +123,10 @@ else
 fi
 
 # --- 3. Oracle credentials (browser login, once) ------------------------------
-header "Oracle credentials — one-time browser login"
+# This is where the browser session is traded for a PERMANENT API key: oci setup
+# bootstrap logs you in once, then generates + uploads an API signing key and
+# writes ~/.oci/config. Terraform then authenticates with that key (no pasting).
+header "Checkpoint 2 — Oracle login (creates your permanent API key)"
 read_fingerprint() {
     awk -F= -v p="[$PROFILE]" '/^\[/{s=$0} s==p && $1=="fingerprint"{gsub(/[ \t\r]/,"",$2);print $2;exit}' "$OCI_CONFIG" 2>/dev/null
 }
