@@ -9,21 +9,16 @@ the outside world meets your server's address instead of your Mac's. A
 from-scratch look at how a VPN-like data path is actually built.
 
 ## What it is
-Normal proxies are **opt-in**: each app chooses to use them, so command-line
-tools and system daemons just ignore them and leak around. ColdSpot instead
-captures traffic **at the IP layer**, below the app — so nothing can opt out —
-and carries it over a **reverse tunnel** the iPhone holds open to the Mac. The
-iPhone relays it onward to your **exit server**, which sends it to the internet
-from an address you control.
+
+A virtual interface captures **all** of a Mac's traffic at Layer 3; `tun2socks`
+turns those packets into a SOCKS stream; a reverse tunnel to a paired iPhone
+carries each connection onward to a **self-hosted exit server you own**
+(authenticated SOCKS5 over TLS) that re-originates it to the internet. Capturing
+at Layer 3 means even apps that ignore proxy settings get caught; the iPhone is a
+dumb relay, so the Mac↔exit conversation is end-to-end.
 
 Built as **developer/educational material** — a working system to stand up and
-learn from, end to end, not a product. The four ideas it ties together:
-
-- **Layer-3 capture** — a virtual interface grabs every packet, so no app escapes.
-- **Userspace TCP/IP** (`tun2socks`) — turns those raw packets back into connections.
-- **Reverse tunnel** — the iPhone dials *out* to the Mac and holds slots open
-  (so a phone behind carrier NAT can still be reached).
-- **Self-hosted exit** — your own cloud server is the final hop to the internet.
+learn from, end to end, not a product.
 
 ## How it works
 ```
@@ -39,26 +34,12 @@ app ─┬─ SOCKS5 :1080 (cooperating apps) ───────────�
                                                        ▼
                           exit server  (authenticated SOCKS5 over TLS) → internet
 ```
-- **utun123** — virtual interface made the default route (`0/1`+`128/1`), so it captures everything
-- **tun2socks** — turns raw IP packets back into TCP connections (userspace TCP/IP stack)
-- **proxy.py** — SOCKS5 server + pool of reverse-tunnel "slots" + live leak dashboard
-- **iPhone app** — holds 30 slots open to the Mac and relays each onward as a plain pipe
-- **exit server** — a free Oracle Always-Free VM you own; runs an authenticated
-  SOCKS5-over-TLS exit and re-originates traffic to the internet from a stable IP
-- **launchd** — auto-starts/stops the whole thing based on whether you're on the hotspot
+The iPhone is a **dumb pipe**: the Mac tells it only to dial the exit, then runs
+TLS + authenticated SOCKS5 to the exit *through* that pipe, end-to-end — so the
+connection to your server is encrypted and all config stays on the Mac.
 
-The iPhone never parses the real destination: the Mac tells it only to dial the
-exit, then speaks **TLS + authenticated SOCKS5 to the exit *through* that pipe**,
-end-to-end. So the iPhone is a dumb relay, all server config lives on the Mac,
-and the connection to your exit is encrypted (an observer on the path sees only
-an encrypted stream to your server, not which sites you reach). No WireGuard is
-involved — the "tunnel" is the plain TCP slots to the phone, with TLS layered on
-top end-to-end. The loop (proxy's own traffic falling back into utun123) is
-prevented structurally by longest-prefix routing: the hotspot subnet
-`172.20.10.0/28` and loopback `127/8` are more specific than the `/1` capture, so
-they stay on `en0`/`lo0`.
-
-📐 **Full walkthrough + diagrams:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) ·
+📐 **The full walkthrough — every layer, routing, and the round-trip:**
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) ·
 🛠 **Setup:** [docs/SETUP.md](docs/SETUP.md)
 
 ## Repository layout

@@ -81,10 +81,6 @@ news.com/github ─► exit ─► iPhone ─► slot ─► en0 ─► proxy.py
                                                              └─► tun2socks ─► utun ─► git
 ```
 
-The Mac tells the iPhone only to dial `exit:port`; it then runs TLS + authenticated
-SOCKS5 to the exit **through** that slot, so the real destination is negotiated
-end-to-end (Mac ↔ exit) and the iPhone never parses it.
-
 ---
 
 ## 3. Components
