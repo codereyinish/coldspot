@@ -74,17 +74,17 @@ coldspot/
 └── docs/          ARCHITECTURE.md, SETUP.md
 ```
 
-## Quick start
+## Setup
 
-Create a free cloud account, then run **one command** — it sets up the server,
-then your Mac, automatically. Two checkpoints need you: one browser login, and
-your iPhone at the end.
+Create an Oracle account, then run one command — the server and your Mac set
+themselves up. Two checkpoints need you: one browser login, and your iPhone.
 
 ### 1 · Create a free Oracle Cloud account
 
-The only account you need: <https://signup.cloud.oracle.com>. Signup needs a card
-+ SMS (the **Always-Free** tier doesn't charge you) and asks you to pick a **Home
-Region** — choose one near you; it's **permanent** and your server lives in it.
+The only manual step: <https://signup.cloud.oracle.com>. Signup needs card + SMS
+(the **Always-Free** tier doesn't charge you), and asks you to **choose a Home
+Region** — pick one near you. It's **permanent** on a free account and your server
+lives in it, so remember which you pick (you'll re-enter it when `provision.sh` asks).
 
 <details>
 <summary>The full signup walkthrough</summary>
@@ -98,7 +98,7 @@ Region** — choose one near you; it's **permanent** and your server lives in it
 
 </details>
 
-### 2 · Clone + run one command — builds the server, then sets up your Mac
+### 2 · Run it — one command builds the server *and* sets up your Mac
 
 ```bash
 git clone https://github.com/codereyinish/coldspot.git
@@ -106,49 +106,41 @@ cd coldspot/server/provision
 ./provision.sh
 ```
 
-It runs in this order, hands-off except where noted:
+`provision.sh` does the rest automatically — one browser login, nothing to paste:
+it builds a free Oracle VM, installs the exit over SSH, then hands off to
+`mac/install.sh` (fetches the server's cert + credentials, installs the ❄️
+menu-bar toggle). During the login it walks you through four prompts — **Home
+Region**, click **Allow** on the *"Allow Python…"* popup, **log in + Authorize**,
+and type **`N/A`** at the passphrase prompt.
 
-1. **Server** — installs the tools it needs, logs you into Oracle in the browser
-   **once** (your only checkpoint here), builds a free VM, and installs the exit
-   on it over SSH.
-2. **Mac** — automatically hands off to `mac/install.sh`, which fetches the
-   server's cert + credentials and installs the ❄️ menu-bar toggle.
+**Already have a server?** Run `bash mac/install.sh` from the repo instead — it
+asks for the server IP and does the rest.
 
-During the one login it walks you through four prompts: pick your **Home Region**,
-click **Allow** on the macOS *"Allow Python…"* popup (don't skip it — the login
-needs it), **log in + Authorize** in the browser, and type **`N/A`** at the
-passphrase prompt. After that it's automatic.
-
-> Already have an Ubuntu server? Skip provisioning and run `bash mac/install.sh`
-> from the repo — it asks for the server's IP and does the rest.
-
-### 3 · Checkpoint — set up your iPhone (one-time)
+### 3 · Set up your iPhone (one-time)
 
 ColdSpot's relay is a tiny app you run on your own phone from Xcode (free Apple ID
 is fine):
 
-1. Plug the iPhone into the Mac; enable **Developer Mode** (Settings → Privacy &
-   Security → Developer Mode) and trust the computer.
-2. Open `ios/ProxyTest.xcodeproj` in Xcode → select the **ProxyTest** target →
-   **Signing & Capabilities** → set **Team** to your Apple ID.
-3. Pick your iPhone in the device menu and click **Run ▶**.
-4. On the phone: **Settings → General → VPN & Device Management** → trust your
-   developer app.
-5. Open the app and tap **Start** (it opens its relay slots).
+1. Plug the iPhone in; enable **Developer Mode** (Settings → Privacy & Security)
+   and trust the Mac.
+2. Open `ios/ProxyTest.xcodeproj` → **ProxyTest** target → **Signing &
+   Capabilities** → set **Team** to your Apple ID.
+3. Pick your iPhone and click **Run ▶**, then **Trust** the app on the phone
+   (Settings → General → VPN & Device Management).
+4. Open the app and tap **Start**.
 
-Full walkthrough (creating the project, permissions): [docs/SETUP.md](docs/SETUP.md).
+Full walkthrough: [docs/SETUP.md](docs/SETUP.md).
 
 ### 4 · Turn it on
 
-Connect the Mac to the iPhone's **Personal Hotspot** (the Mac should get address
-`172.20.10.2`), then click the ❄️ in your menu bar → **ON**.
+Connect the Mac to the iPhone's **Personal Hotspot**, then click the ❄️ menu-bar
+button → **ON**.
 
 ```bash
-curl https://ifconfig.me      # should print your EXIT SERVER's IP, not your home one
+curl https://ifconfig.me      # should print your server's IP, not your home one
 ```
 
-If that shows the Oracle server's address, traffic is flowing the whole way
-through. After a reboot ColdSpot stays **off** until you flip ❄️ ON again.
+After a reboot ColdSpot stays **off** until you flip ❄️ ON again.
 
 ## Menu-bar toggle (SwiftBar)
 A ❄️ menu-bar switch turns ColdSpot on/off. The button never does privileged work
