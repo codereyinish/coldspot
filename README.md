@@ -38,8 +38,8 @@ The iPhone is a **dumb pipe**: the Mac tells it only to dial the exit, then runs
 TLS + authenticated SOCKS5 to the exit *through* that pipe, end-to-end — so the
 connection to your server is encrypted and all config stays on the Mac.
 
-📐 **The full walkthrough — every layer, routing, and the round-trip:**
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) ·
+📐 **Architecture & data-flow diagram:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) ·
+🗺 **Roadmap:** [docs/ROADMAP.md](docs/ROADMAP.md) ·
 🛠 **Setup:** [docs/SETUP.md](docs/SETUP.md)
 
 ## Repository layout
