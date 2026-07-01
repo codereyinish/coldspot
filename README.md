@@ -76,8 +76,8 @@ coldspot/
 
 ## Setup
 
-Create an Oracle account, then run one command — the server and your Mac set
-themselves up. Two checkpoints need you: one browser login, and your iPhone.
+Create an Oracle account, then run one command — everything else is automatic.
+(Your iPhone is the last step; see 3 below.)
 
 ### 1 · Create a free Oracle Cloud account
 
@@ -106,15 +106,17 @@ cd coldspot/server/provision
 ./provision.sh
 ```
 
-`provision.sh` does the rest automatically — one browser login, nothing to paste:
-it builds a free Oracle VM, installs the exit over SSH, then hands off to
-`mac/install.sh` (fetches the server's cert + credentials, installs the ❄️
-menu-bar toggle). During the login it walks you through four prompts — **Home
-Region**, click **Allow** on the *"Allow Python…"* popup, **log in + Authorize**,
-and type **`N/A`** at the passphrase prompt.
+`provision.sh` does the rest automatically — one browser login, nothing to paste.
+What it does and how: [server/provision](server/provision).
 
-**Already have a server?** Run `bash mac/install.sh` from the repo instead — it
-asks for the server IP and does the rest.
+During the login the script walks you through four one-time prompts: pick your
+**Home Region**, click **Allow** on the macOS *"Allow Python…"* popup (don't skip
+it — the login needs it), **log in + Authorize** in the browser, and type **`N/A`**
+at the passphrase prompt. After that it's hands-off.
+
+**Prefer to do it by hand?** Create the VM in the Oracle console, then run
+`bash mac/install.sh` from the repo — it asks for the **server IP** and **SSH
+user** (`ubuntu`).
 
 ### 3 · Set up your iPhone (one-time)
 
