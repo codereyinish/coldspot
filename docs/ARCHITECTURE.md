@@ -83,23 +83,7 @@ news.com/github ─► exit ─► iPhone ─► slot ─► en0 ─► proxy.py
 
 ---
 
-## 3. Components
-
-| Component | Runs on | Role | Layer |
-|---|---|---|---|
-| **exit.py** | exit server (yours) | authenticated SOCKS5-over-TLS exit; re-originates connections to the internet | L5 |
-| **iPhone app** | iPhone | holds 30 "slots" open to the Mac; relays each onward to the exit over its mobile uplink (a dumb pipe) | — |
-| **proxy.py** | Mac | SOCKS5 server (:1080) + slot pool (:9999) + byte/leak dashboard; speaks TLS+SOCKS to the exit through each slot | L5 |
-| **tun2socks** | Mac | translates raw IP packets ⇄ SOCKS connections (two-way) | L3⇄L5 |
-| **utun123** | Mac | virtual interface that captures all traffic | L3 |
-| **routing table** | Mac | decides what enters utun vs stays on en0 | L3 |
-| **coldspot-tun-ctl.sh** | Mac | idempotent up/down/status engine for the capture | — |
-| **coldspot-watch.sh** | Mac | launchd-driven start/stop logic | — |
-| **launchd (.plist)** | Mac | triggers the watcher on network change + every 30s | — |
-
----
-
-## 4. The layered view (why Layer 3 matters)
+## 3. The layered view (why Layer 3 matters)
 
 ```
 L7 APPLICATION   git, HTTP, DNS, your data
@@ -116,7 +100,7 @@ L2/L1 LINK       WiFi to the hotspot
 
 ---
 
-## 5. Detailed round-trip (Safari + git, concurrently)
+## 4. Detailed round-trip (Safari + git, concurrently)
 
 **Starting state:** proxy.py listening on :1080 and :9999; iPhone has 20 idle
 slots open to Mac:9999; utun123 up with routes `0/1` + `128/1`; macOS SOCKS
@@ -192,7 +176,7 @@ GIT (entered via capture):
 
 ---
 
-## 6. Concurrency & the slot pool
+## 5. Concurrency & the slot pool
 
 A single web page is **dozens** of connections (HTML, CSS, JS, images), each its
 own `CONNECT`, each grabbing **its own slot**:
@@ -215,19 +199,19 @@ FIX (planned): don't clear the whole pool on one dead slot; iPhone shouldn't ove
 
 ---
 
-## 7. Key design problems & solutions
+## 6. Key design problems & solutions
 
-### 7a. Why not just the SOCKS5 system setting?
+### 6a. Why not just the SOCKS5 system setting?
 Layer 5 = opt-in → git/iCloud/CLIs ignore it → ~94% leaked. **Solution:** capture
 at Layer 3 (utun), where routing isn't optional → leak → ~0.2%.
 
-### 7b. Why does the iPhone dial the Mac (reverse tunnel)?
+### 6b. Why does the iPhone dial the Mac (reverse tunnel)?
 iOS won't let an app intercept tethered-client traffic or grab packets passively.
 **Solution:** the iPhone opens connections *to* the Mac (a slot pool); the Mac
 pushes requests into them; the iPhone **re-originates** each over cellular, so it
 exits as the iPhone's own traffic.
 
-### 7c. The routing loop (the cleverest part)
+### 6c. The routing loop (the cleverest part)
 utun sends all internet traffic to proxy.py — but proxy.py must reach the iPhone
 (`172.20.10.1`). If *that* also entered utun → `proxy.py → utun → proxy.py → …`
 infinite loop. **Solution: longest-prefix-match routing.**
@@ -237,19 +221,19 @@ infinite loop. **Solution: longest-prefix-match routing.**
   the default without deleting it** — they beat `/0` but lose to the `/28`.
   No loop, and fully reversible (delete two routes → default restored).
 
-### 7d. DNS would silently break it
+### 6d. DNS would silently break it
 Route everything into utun → DNS (UDP) hits the TCP-only proxy → dies → nothing
 resolves. **Solution:** pin the DNS resolver (`1.1.1.1`) to en0 with a host route
 so lookups bypass the tunnel (KB-scale).
 
-### 7e. Automation & the WatchPaths blind spot
+### 6e. Automation & the WatchPaths blind spot
 launchd watches `SystemConfiguration` → fires on network change. But the iPhone
 connecting its slots is just a **TCP socket**, not a config change → WatchPaths
 never fires for it → utun would never come up. **Solution:** `StartInterval=30s`
 reconcile — a periodic, idempotent re-check that brings utun up once slots are
 ready and tears down stale routes.
 
-### 7f. Fail-safe — never blacks out the Mac
+### 6f. Fail-safe — never blacks out the Mac
 utun up with 0 working slots → all traffic routes into a dead end → no internet.
 **Solution:** the up-path is **gated** — it refuses to capture unless (proxy up
 AND ≥1 slot). Teardown restores the default route instantly; leaving the hotspot
@@ -257,7 +241,7 @@ auto-tears-down.
 
 ---
 
-## 8. Explaining it (three depths)
+## 7. Explaining it (three depths)
 
 **30 seconds:** "A transparent system-wide proxy: a virtual interface captures all
 of a Mac's traffic at the IP layer, tun2socks converts those packets into a SOCKS
@@ -267,12 +251,12 @@ settings get caught."
 
 **2 minutes:** walk the round-trip (Section 5) + the L3-vs-L5 thesis (Section 4).
 
-**Deep dive:** the **routing loop + longest-prefix-match (7c)** — it shows you
+**Deep dive:** the **routing loop + longest-prefix-match (6c)** — it shows you
 understand routing internals, not just gluing tools.
 
 ---
 
-## 9. Transferable concepts
+## 8. Transferable concepts
 
 - **TUN/TAP & userspace networking** — capturing at L3, rebuilding TCP in userspace.
 - **"VPN-ify any proxy"** — `tun2socks + any SOCKS proxy` = system-wide tunnel
@@ -285,7 +269,7 @@ understand routing internals, not just gluing tools.
 
 ---
 
-## 10. Components on disk
+## 9. Components on disk
 
 ```
 ios-proxy-test/
@@ -300,7 +284,7 @@ ios-proxy-test/
 
 ---
 
-## 11. Future work / improvements
+## 10. Future work / improvements
 
 ### Idle-slot reaper (watermark-gated)
 Persistent idle connections — WebSockets (e.g. `alive.github.com`), keepalives,
